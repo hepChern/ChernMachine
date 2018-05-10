@@ -5,9 +5,9 @@ import os
 import subprocess
 from Chern.utils import csys
 from Chern.utils import metadata
-from Chern.kernel.VJob import VJob
-from Chern.kernel.VContainer import VContainer
-from Chern.kernel.VImage import VImage
+from ChernMachine.kernel.VJob import VJob
+from ChernMachine.kernel.VContainer import VContainer
+from ChernMachine.kernel.VImage import VImage
 
 class ChernDatabase(object):
     ins = None
@@ -30,7 +30,8 @@ class ChernDatabase(object):
         return (ps.poll() == 0)
 
     def job(self, id):
-        storage_path = csys.storage_path()
+        # storage_path = csys.storage_path()
+        # storage_path = csys.storage_path()
         if os.path.exists(storage_path+"/"+id):
             return VJob(storage_path+"/"+id)
         else:
@@ -44,12 +45,14 @@ class ChernDatabase(object):
         jobs_list_file.write_variable("jobs_list", job_id_list)
 
     def jobs(self, condition):
-        storage_path = csys.storage_path()
-        jobs_list_file = metadata.ConfigFile(storage_path+"/jobs.json")
-        job_id_list = jobs_list_file.read_variable("jobs_list", [])
+        # storage_path = csys.storage_path()
+        storage_path = os.path.join(os.environ["HOME"], ".ChernMachine/Storage")
+        job_id_list = csys.list_dir(storage_path)
+        print("job id list {0}".format(job_id_list), file=sys.stderr)
         job_list = []
         for job_id in job_id_list:
-            job = VJob(storage_path + "/" + job_id)
+            print("check job {0}".format(job_id), file=sys.stderr)
+            job = VJob(os.path.join(storage_path, job_id))
             if job.job_type() == "container":
                 job = VContainer(job.path)
             elif job.job_type() == "image":
@@ -94,18 +97,3 @@ class ChernDatabase(object):
         local_config_file = metadata.ConfigFile(self.local_config_path)
         projects_path = local_config_file.read_variable("projects_path", {})
         return list(projects_path.keys())
-
-
-
-    def project_path(self):
-        """ Get The path of a specific project.
-        You must be sure that the project exists.
-        This function don't check it.
-        """
-        project_name = self.get_current_project()
-        local_config_file = metadata.ConfigFile(self.local_config_path)
-        projects_path = local_config_file.read_variable("projects_path")
-        return projects_path[project_name]
-
-
-

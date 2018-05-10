@@ -58,3 +58,4 @@ def stop():
         return
     daemon_path = csys.daemon_path()
     subprocess.call("kill {}".format(open(daemon_path + "/daemon.pid").read()), shell=True)
+
