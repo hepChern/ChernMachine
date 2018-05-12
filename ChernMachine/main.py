@@ -86,6 +86,13 @@ def execute(path):
         job = VImage(path)
     job.execute()
 
+@cli.command()
+@click.argument("impression")
+@click.argument("path")
+def feed(impression, path):
+    from ChernMachine.feeder import feed as cli_feed
+    cli_feed(impression, path)
+
 # Main
 def main():
     cli()

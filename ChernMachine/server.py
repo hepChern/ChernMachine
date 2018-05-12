@@ -7,6 +7,10 @@ from flask import request
 from flask import send_from_directory
 import os
 
+from ChernMachine.kernel.VJob import VJob
+from ChernMachine.kernel.VImage import VImage
+from ChernMachine.kernel.VContainer import VContainer
+
 app = Flask(__name__)
 
 @app.route('/upload', methods=['GET', 'POST'])
@@ -18,7 +22,7 @@ def upload_file():
 
         tar = tarfile.open(os.path.join("/tmp", tarname),"r")
         for ti in tar:
-            tar.extract(ti, os.path.join(storage_path, tarname.rstrip("tar.gz")))
+            tar.extract(ti, os.path.join(storage_path, tarname[:-7]))
         tar.close()
 
 @app.route("/download/<filename>", methods=['GET'])
@@ -29,6 +33,24 @@ def download_file(filename):
 @app.route("/test", methods=['GET'])
 def test():
     return "Good"
+
+@app.route("/status/<impression>", methods=['GET'])
+def status(impression):
+    path = os.path.join(os.environ["HOME"], ".ChernMachine/Storage", impression)
+    job = VJob(path)
+    if job.job_type() == "image":
+        return VImage(path).status()
+    if job.job_type() == "container":
+        return VContainer(path).status()
+    return "impressed"
+
+@app.route("/outputs/<impression>", methods=['GET'])
+def outputs(impression):
+    path = os.path.join(os.environ["HOME"], ".ChernMachine/Storage", impression)
+    job = VJob(path)
+    if job.job_type() == "container":
+        return " ".join(VContainer(path).outputs())
+    return ""
 
 def start():
     daemon_path = os.path.join(os.environ["HOME"], ".ChernMachine/daemon")
