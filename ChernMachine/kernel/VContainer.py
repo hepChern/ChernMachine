@@ -193,7 +193,7 @@ const chern::Folders folders;
     def status(self):
         dirs = csys.list_dir(self.path)
         for run in dirs:
-            if run.startswith("run."):
+            if run.startswith("run.") or run.startswith("raw."):
                 config_file = metadata.ConfigFile(os.path.join(self.path, run, "status.json"))
                 status = config_file.read_variable("status", "submitted")
                 if status == "done":
@@ -202,6 +202,13 @@ const chern::Folders folders;
                     return status
                 return status
         return "submitted"
+
+    def outputs(self):
+        dirs = csys.list_dir(self.path)
+        for run in dirs:
+            if run.startswith("run.") or run.startswith("raw."):
+                return csys.list_dir(os.path.join(self.path, run, "output"))
+        return []
 
     def kill(self):
         ps = subprocess.Popen("docker kill {0}".format(self.container_id()),
