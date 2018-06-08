@@ -52,6 +52,13 @@ def outputs(impression):
         return " ".join(VContainer(path).outputs())
     return ""
 
+@app.route("/getfile/<impression>/<filename>", methods=['GET'])
+def get_file(impression, filename):
+    path = os.path.join(os.environ["HOME"], ".ChernMachine/Storage", impression)
+    job = VJob(path)
+    if job.job_type() == "container":
+        return VContainer(path).get_file(filename)
+
 def start():
     daemon_path = os.path.join(os.environ["HOME"], ".ChernMachine/daemon")
     with daemon.DaemonContext(

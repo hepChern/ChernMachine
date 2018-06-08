@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 from Chern.utils import csys
+from Chern.utils import metadata
 from ChernMachine.kernel.VJob import VJob
 """
 This should have someting
@@ -18,7 +19,25 @@ class VImage(VJob):
         json_info = json.loads(info[0])
         return json_info[0]
 
+    def is_locked(self):
+        status_file = metadata.ConfigFile(os.path.join(self.path, "status.json"))
+        status = status_file.read_variable("status")
+        return status == "locked"
+
     def status(self):
+        dirs = csys.list_dir(self.path)
+        for run in dirs:
+            if run.startswith("run."):
+                config_file = metadata.ConfigFile(os.path.join(self.path, run, "status.json"))
+                status = config_file.read_variable("status", "submitted")
+                print("status is ", status, file=sys.stderr)
+                if status != "submitted":
+                    return status
+
+        if self.is_locked():
+            return "locked"
+        return "submitted"
+
         status = self.config_file.read_variable("status")
         if status is None:
             return "submitted"
@@ -26,24 +45,38 @@ class VImage(VJob):
             return status
 
     def image_id(self):
-        image_id = self.config_file.read_variable("image_id")
-        return image_id
+        dirs = csys.list_dir(self.path)
+        for run in dirs:
+            if run.startswith("run."):
+                config_file = metadata.ConfigFile(os.path.join(self.path, run, "status.json"))
+                status = config_file.read_variable("status", "submitted")
+                if status == "built":
+                    return config_file.read_variable("image_id")
+        return ""
 
+    def machine_storage(self):
+        config_file = metadata.ConfigFile(os.path.join(os.environ["HOME"], ".ChernMachine/config.json"))
+        machine_id = config_file.read_variable("machine_id")
+        return "run." + machine_id
 
     def execute(self):
-        self.config_file.write_variable("status", "building")
+        run_path = os.path.join(self.path, self.machine_storage())
+        csys.copy_tree(os.path.join(self.path, "contents"), run_path)
+        status_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
+        status_file.write_variable("status", "building")
+        entrypoint = open(os.path.join(run_path, "entrypoint.sh"), "w")
+        entrypoint.write("""#!/bin/bash\n$@\n""")
+        entrypoint.close()
         try:
-            csys.copy_tree(os.path.join(self.path, "contents"), os.path.join(self.path, "run"))
-            entrypoint = open(self.path+"/run/entrypoint.sh", "w")
-            # entrypoint.write("""#!/bin/bash\n$@\nmd5sum output\n""")
-            entrypoint.write("""#!/bin/bash\n$@\n""")
-            entrypoint.close()
             self.build()
         except Exception as e:
             self.append_error("Fail to build the image!\n"+str(e))
-            self.config_file.write_variable("status", "failed")
+            status_file.write_variable("status", "failed")
             raise e
-        self.config_file.write_variable("status", "built")
+        status_file.write_variable("status", "built")
+
+    def satisfied(self):
+        return True
 
     def build(self):
         """
@@ -56,7 +89,8 @@ class VImage(VJob):
             write a docker file
             then, you should build the docker file
         """
-        os.chdir(self.path + "/run")
+        run_path = os.path.join(self.path, self.machine_storage())
+        os.chdir(run_path)
         ps = subprocess.Popen("docker build .", shell=True,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         ps.wait()
@@ -64,4 +98,5 @@ class VImage(VJob):
             raise Exception(ps.stderr.read().decode())
         info = ps.communicate()[0]
         image_id = info.split()[-1]
-        self.config_file.write_variable("image_id", image_id.decode())
+        status_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
+        status_file.write_variable("image_id", image_id.decode())

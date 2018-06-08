@@ -59,7 +59,7 @@ class ChernDatabase(object):
                 job = VImage(job.path)
             else:
                 continue
-            # print("{0} {1}".format(job, job.status()), file=sys.stderr)
+            print("{0} {1}".format(job, job.status()), file=sys.stderr)
             if job.status() == condition:
                 job_list.append(job)
         return job_list

@@ -4,6 +4,7 @@
 import subprocess
 import Chern
 import os
+import sys
 import shutil
 from Chern.utils import utils
 from Chern.utils import csys
@@ -25,7 +26,7 @@ class VContainer(VJob):
         super(VContainer, self).__init__(path)
         pass
 
-    def machine_id(self):
+    def machine_storage(self):
         config_file = metadata.ConfigFile(os.path.join(os.environ["HOME"], ".ChernMachine/config.json"))
         machine_id = config_file.read_variable("machine_id")
         return "run." + machine_id
@@ -81,7 +82,14 @@ class VContainer(VJob):
         self.set_update_time()
 
     def storage(self):
-        return os.path.join(self.path, self.machine_id(), "output")
+        dirs = csys.list_dir(self.path)
+        for run in dirs:
+            if run.startswith("run.") or run.startswith("raw."):
+                config_file = metadata.ConfigFile(os.path.join(self.path, run, "status.json"))
+                status = config_file.read_variable("status", "submitted")
+                if status == "done":
+                    return run
+        return ""
 
     def image(self):
         predecessors = self.predecessors()
@@ -91,7 +99,7 @@ class VContainer(VJob):
         return None
 
     def container_id(self):
-        run_path = os.path.join(self.path, self.machine_id())
+        run_path = os.path.join(self.path, self.machine_storage())
         config_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
         container_id = config_file.read_variable("container_id")
         return container_id
@@ -101,22 +109,25 @@ class VContainer(VJob):
         return impression
 
     def create_container(self, container_type="task"):
-        mounts = "-v {1}:/data/{0}".format(self.impression(), self.storage())
+        mounts = "-v {1}:/data/{0}".format(self.impression(), os.path.join(self.path, self.machine_storage(), "output"))
         for input_container in self.inputs():
             mounts += " -v {1}:/data/{0}:ro".format(input_container.impression(),
-                                                  input_container.storage())
+                                                  os.path.join(input_container.path, input_container.storage(), "output"))
         image_id = self.image().image_id()
         ps = subprocess.Popen("docker create {0} {1}".format(mounts, image_id),
                               shell=True, stdout=subprocess.PIPE)
+        print("docker create {0} {1}".format(mounts, image_id),
+                              file=sys.stderr)
+
         ps.wait()
         container_id = ps.stdout.read().decode().strip()
 
-        run_path = os.path.join(self.path, self.machine_id())
+        run_path = os.path.join(self.path, self.machine_storage())
         config_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
         config_file.write_variable("container_id", container_id)
 
     def copy_arguments_file(self):
-        arguments_file = os.path.join(self.path, self.machine_id(), "arguments")
+        arguments_file = os.path.join(self.path, self.machine_storage(), "arguments")
         ps = subprocess.Popen("docker cp {0} {1}:/root".format(arguments_file, self.container_id())
                               , shell=True)
         ps.wait()
@@ -178,7 +189,7 @@ const chern::Parameters parameters;
 const chern::Folders folders;
 #endif
 """.format(parameter_str, folder_str)
-            with open(os.path.join(self.path, self.machine_id(), "arguments"), "w") as f:
+            with open(os.path.join(self.path, self.machine_storage(), "arguments"), "w") as f:
                 f.write(argument_txt)
         except Exception as e:
             raise e
@@ -190,17 +201,32 @@ const chern::Folders folders;
         json_result = json.loads(output)
         return json_result[0]
 
+    def is_raw(self):
+        return csys.exists(os.path.join(self.path, "contents/data.json"))
+
+    def is_locked(self):
+        status_file = metadata.ConfigFile(os.path.join(self.path, "status.json"))
+        status = status_file.read_variable("status")
+        return status == "locked"
+
     def status(self):
         dirs = csys.list_dir(self.path)
+        if self.is_locked(): return "locked"
+        running = False
         for run in dirs:
             if run.startswith("run.") or run.startswith("raw."):
                 config_file = metadata.ConfigFile(os.path.join(self.path, run, "status.json"))
-                status = config_file.read_variable("status", "submitted")
+                status = config_file.read_variable("status")
                 if status == "done":
                     return status
                 if status == "failed":
                     return status
-                return status
+                if status == "running":
+                    running = True
+        if self.is_raw():
+            return "raw"
+        if running:
+            return "running"
         return "submitted"
 
     def outputs(self):
@@ -209,6 +235,16 @@ const chern::Folders folders;
             if run.startswith("run.") or run.startswith("raw."):
                 return csys.list_dir(os.path.join(self.path, run, "output"))
         return []
+
+    def get_file(self, filename):
+        dirs = csys.list_dir(self.path)
+        for run in dirs:
+            if run.startswith("run.") or run.startswith("raw."):
+                if filename == "stdout":
+                    return os.path.join(self.path, run, filename)
+                else:
+                    return os.path.join(self.path, run, "output", filename)
+
 
     def kill(self):
         ps = subprocess.Popen("docker kill {0}".format(self.container_id()),
@@ -221,12 +257,12 @@ const chern::Folders folders;
                               shell=True, stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT)
 
-        run_path = os.path.join(self.path, self.machine_id())
+        run_path = os.path.join(self.path, self.machine_storage())
         config_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
         config_file.write_variable("docker_run_pid", ps.pid)
         ps.wait()
 
-        run_path = os.path.join(self.path, self.machine_id())
+        run_path = os.path.join(self.path, self.machine_storage())
         stdout = os.path.join(run_path, "stdout")
         with open(stdout, "w") as f:
             f.write(ps.stdout.read().decode())
@@ -241,8 +277,27 @@ const chern::Folders folders;
             print("Successful removed")
             shutil.rmtree(self.path)
 
+    def check(self):
+        run_path = os.path.join(self.path, self.machine_storage())
+        status_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
+        status_file.write_variable("status", "running")
+        try:
+            self.create_arguments_file()
+            self.create_container()
+            self.copy_arguments_file()
+            status = self.start()
+        except Exception as e:
+            status_file.write_variable("status", "failed")
+            self.append_error(str(e))
+            raise e
+        if status :
+            status_file.write_variable("status", "done")
+        else:
+            status_file.write_variable("status", "failed")
+            self.append_error("Run error")
+
     def execute(self):
-        run_path = os.path.join(self.path, self.machine_id())
+        run_path = os.path.join(self.path, self.machine_storage())
         status_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
         status_file.write_variable("status", "running")
         try:

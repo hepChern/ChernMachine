@@ -129,7 +129,7 @@ class VJob(object):
         pred_str = self.config_file.read_variable("dependencies", [])
         predecessors = []
         for path in pred_str:
-            predecessors.append(VJob(os.path.join(os.environ["HOME"], ".ChernMachine/Storage",path)))
+            predecessors.append(VJob(os.path.join(os.environ["HOME"], ".ChernMachine/Storage", path)))
         return predecessors
 
     def impression_to_alias(self, path):
