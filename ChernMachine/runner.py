@@ -33,8 +33,9 @@ def execute():
             print("chern_machine execute {}".format(job.path), file=sys.stderr)
             # FIXME Make sure the job will not be executed many times
             status_file = metadata.ConfigFile(os.path.join(job.path, "status.json"))
-            status_file.write_variable("status", "locked")
             subprocess.Popen("chern_machine execute {}".format(job.path), shell=True)
+            while (job.status() == "submitted"):
+                pass
 
 def status():
     daemon_path = csys.daemon_path()
