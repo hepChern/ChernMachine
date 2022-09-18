@@ -34,13 +34,13 @@ setup(
     keywords = "Analysis Perservation",
     packages = find_packages(exclude=[]),
     install_requires = [
-        "Chern==3", "click", "colored", "python-daemon", "ipython"
+        "Chern==4", "click", "colored", "python-daemon", "ipython"
     ],
     include_package_data = True,
     entry_points = {
         'console_scripts': [
             'chern_machine = ChernMachine.main:main',
-            'chen_mahine = ChernMachine.main:main'
+            'yukirunner = ChernMachine.main:main'
         ]
     }
 )

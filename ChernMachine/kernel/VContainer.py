@@ -260,12 +260,20 @@ const chern::Folders folders;
         run_path = os.path.join(self.path, self.machine_storage())
         config_file = metadata.ConfigFile(os.path.join(run_path, "status.json"))
         config_file.write_variable("docker_run_pid", ps.pid)
-        ps.wait()
+        out = ""
+        while ps.poll() is None:
+            stdout = ps.stdout
+            if stdout is None:
+                continue
+            line = stdout.readline().decode()
+                # line = line.strip()
+            if line:
+                out += line
 
         run_path = os.path.join(self.path, self.machine_storage())
         stdout = os.path.join(run_path, "stdout")
         with open(stdout, "w") as f:
-            f.write(ps.stdout.read().decode())
+            f.write(out)
         return (ps.poll() == 0)
 
     def remove(self):
