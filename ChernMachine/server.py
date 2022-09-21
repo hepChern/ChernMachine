@@ -15,22 +15,25 @@ from ChernMachine.kernel.VContainer import VContainer
 from celery import Celery
 
 app = Flask(__name__)
-# app.config['SECRET_KEY'] = 'top-secret!'
 
-# Flask-Mail configuration
+app.config['SECRET_KEY'] = 'top-secret!'
 
 # Celery configuration
-# app.config['CELERY_BROKER_URL'] = 'amqp://localhost'
-# app.config['CELERY_RESULT_BACKEND'] = 'amqp'
+app.config['CELERY_BROKER_URL'] = 'amqp://localhost'
+app.config['CELERY_RESULT_BACKEND'] = 'amqp'
 
-# celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
-# celery.conf.update(app.config)
+celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
+celery.conf.update(app.config)
 
 import sqlite3
 
 def connect():
     conn = sqlite3.connect(os.path.join(os.environ["HOME"], '.ChernMachine/Storage/impressions.db') )
     return conn
+
+@celery.task
+def task_exec_impression(impression):
+    return "Run id"
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
@@ -62,26 +65,38 @@ def download_file(filename):
     directory = os.getcwd()+"/data"  # 假设在当前目录
     return send_from_directory(directory, filename, as_attachment=True)
 
-@app.route("/test", methods=['GET'])
-def test():
-    return "Good"
-
 @app.route("/status/<impression>", methods=['GET'])
 def status(impression):
     path = os.path.join(os.environ["HOME"], ".ChernMachine/Storage", impression)
-    job = VJob(path)
-    if job.job_type() == "image":
-        return VImage(path).status()
-    if job.job_type() == "container":
-        return VContainer(path).status()
-    if os.path.exists(path):
-        return "submitted"
+    for machine_id in runners:
+      job = VJob(path, machine_id)
+      runid = job.runid
+      status = VImage(path).status()
+
+      if job.job_type() == "image":
+          return VImage(path).status()
+      if job.job_type() == "container":
+          return VContainer(path).status()
+      if os.path.exists(path):
+          return "submitted"
     return "unsubmitted"
 
 @app.route("/serverstatus", methods=['GET'])
 def serverstatus():
     return "ok"
 
+@app.route("/run/<impression>", methods=['GET'])
+def run(impression):
+    # We need to save the run id to the id of job
+    task = task_exec_impression(impression).apply_async()
+    VJob(impression).runid = task.id
+    return task.id
+
+@app.route("runstatus/<impression>", method=['GET'])
+def runstatus(impression):
+    task_id = get_run_id(impression)
+    long_task.AsyncResult(task_id)
+    return statu0s
 
 @app.route("/outputs/<impression>", methods=['GET'])
 def outputs(impression):
