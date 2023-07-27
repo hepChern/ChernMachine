@@ -14,11 +14,12 @@ from Chern.kernel.ChernDatabase import ChernDatabase
 
 from ChernMachine.register import register as machine_register
 
-from ChernMachine.server import start as server_start
+from ChernMachine.server import server_start
 from ChernMachine.server import stop as server_stop
 from ChernMachine.server import status as server_status
 
 from ChernMachine.runner import start as runner_start
+# from ChernMachine.server import runner_start
 from ChernMachine.runner import stop as runner_stop
 from ChernMachine.runner import status as runner_status
 

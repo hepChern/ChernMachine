@@ -1,22 +1,25 @@
 #!/usr/bin/python3
 """
 Chern machine runner
+With celery, the only usage of this runner is to start the celery worker
 """
 import daemon
-import time
+# import time
 from daemon import pidfile
 import os
 import sys
 import subprocess
-from Chern.utils import csys
-from Chern.utils import metadata
+# from Chern.utils import csys
+# from Chern.utils import metadata
 from ChernMachine.ChernDatabase import ChernDatabase
-from ChernMachine.kernel.VImage import VImage
-from ChernMachine.kernel.VContainer import VContainer
-from ChernMachine.kernel.VJob import VJob
+# from ChernMachine.kernel.VImage import VImage
+# from ChernMachine.kernel.VContainer import VContainer
+# from ChernMachine.kernel.VJob import VJob
+from .server import celeryapp
 
 cherndb = ChernDatabase.instance()
 
+"""
 def check_status():
     pending_jobs = cherndb.jobs("pending")
 
@@ -36,30 +39,18 @@ def execute():
             subprocess.Popen("chern_machine execute {}".format(job.path), shell=True)
             while (job.status() == "submitted"):
                 pass
+"""
 
 def status():
-    daemon_path = csys.daemon_path()
     pid_file = os.path.join(os.environ["HOME"], ".ChernMachine", "daemon/runner.pid")
     if os.path.exists(pid_file):
         return "started"
-        pid = open(pid_file).read().decode().strip()
     else:
         return "stopped"
 
 def start():
-    pid_file = os.path.join(os.environ["HOME"], ".ChernMachine", "daemon/runner.pid")
-    log_file = os.path.join(os.environ["HOME"], ".ChernMachine", "daemon/runner.log")
-    with daemon.DaemonContext(
-        working_directory="/",
-        pidfile=pidfile.TimeoutPIDLockFile(pid_file),
-        stderr=open(log_file, "w+"),
-        ):
-        while True:
-            time.sleep(1)
-            try:
-                execute()
-            except Exception as e:
-                print(e, file=sys.stderr)
+    runner = celeryapp.Worker()
+    runner.start()
 
 def stop():
     if status() == "stopped":
